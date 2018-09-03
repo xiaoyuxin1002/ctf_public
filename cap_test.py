@@ -4,7 +4,6 @@ import gym_cap
 import numpy as np
 
 # the modules that you can use to generate the policy.
-import policy.patrol
 import policy.random
 import policy.roomba
 
@@ -36,8 +35,8 @@ while True:
         #action = [0, 0, 0, 0]
         #observation, reward, done, info = env.step(action)
 
-        action = policy_blue.gen_action(env.get_team_blue, observation)
-        observation, reward, done, info = env.step(action)  # feedback from environment
+        # action = policy_blue.gen_action(env.get_team_blue, observation)
+        observation, reward, done, info = env.step()  # feedback from environment
 
         # render and sleep are not needed for score analysis
         # env.render(mode="fast")
