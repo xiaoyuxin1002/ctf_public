@@ -52,16 +52,22 @@ class PolicyGen:
         self.identity_list = np.zeros(len(agent_list))
         self.identity_list[0:int(len(agent_list)*Patrolling_Rate)] = Patrolling_Group
         self.prev_action_list = np.full((len(agent_list)), DOWN)
+        # add randomness into action to prevent stucking in a local region
+        self.count = 50
 
     def gen_action(self, agent_list, obs, free_map=None):
         if map is not None:
             self.map = free_map
 
+        self.count = self.count - 1
         action_out = []
 
         for idx,agent in enumerate(agent_list):
             a = self.roomba(agent, idx, self.identity_list[idx], obs)
             action_out.append(a)
+
+        if self.count == 0:
+            self.count = 50
 
         return action_out
 
@@ -71,38 +77,45 @@ class PolicyGen:
         else:
             return self.explore(agent, index, obs)
 
+    def find_way_down(self, x, y, index, obs):
+        # if it is possible to go down, then go down
+        action = DOWN
+        next_x, next_y = self.next_position(x, y, action)
+        if not self.check_obstacle(next_x, next_y, obs):
+            self.prev_action_list[index] = action
+            return action
+        else:
+            # if it is possible continue the previous direction, then continue
+            action = self.prev_action_list[index]
+            if action == STAY: action = LEFT
+            next_x, next_y = self.next_position(x, y, action)
+            if not self.check_obstacle(next_x, next_y, obs):
+                self.prev_action_list[index] = action
+                return action
+            # otherwise change direction
+            else:
+                potential_actions = [LEFT, UP]
+                if action == LEFT:
+                    potential_actions = [RIGHT, UP]
+                elif action == DOWN:
+                    potential_actions = [LEFT, RIGHT, UP]
+                elif action == UP:
+                    potential_actions = [LEFT, RIGHT]
+                for action in potential_actions:
+                    next_x, next_y = self.next_position(x, y, action)
+                    if not self.check_obstacle(next_x, next_y, obs):
+                        self.prev_action_list[index] = action
+                        return action
+                # TODO: need to solve the extreme case of being trapped in a concave shape
+        return STAY
+
     def patrol(self, agent, index, obs):
         x, y = agent.get_loc()
 
         # if not along the boundary,
         # go down to approach the boundary
         if y < len(obs[0]) / 2 - 1:
-            # if it is possible to go down, then go down
-            action = DOWN
-            next_x, next_y = self.next_position(x, y, action)
-            if not self.check_obstacle(next_x, next_y, obs):
-                self.prev_action_list[index] = action
-                return action
-            else:
-                # if it is possible continue the previous direction, then continue
-                action = self.prev_action_list[index]
-                next_x, next_y = self.next_position(x, y, action)
-                if not self.check_obstacle(next_x, next_y, obs):
-                    self.prev_action_list[index] = action
-                    return action
-                # otherwise change direction
-                else:
-                    potential_actions = [LEFT, UP]
-                    if action == LEFT:
-                        potential_actions = [RIGHT, UP]
-                    elif action == DOWN:
-                        potential_actions = [LEFT, RIGHT, UP]
-                    for action in potential_actions:
-                        next_x, next_y = self.next_position(x, y, action)
-                        if not self.check_obstacle(next_x, next_y, obs):
-                            self.prev_action_list[index] = action
-                            return action
-                    # TODO: need to solve the extreme case of being trapped in a concave shape
+            return self.find_way_down(x, y, index, obs)
 
         # if found enemies within attack range, go head and kill them
         action = self.find_attacking_direction(agent.a_range, x, y, obs)
@@ -132,7 +145,36 @@ class PolicyGen:
         return action
 
     def explore(self, agent, index, obs):
-        return STAY
+        x, y = agent.get_loc()
+
+        if y < len(obs[0]) / 2:
+            return self.find_way_down(x, y, index, obs)
+
+        # if enemy flag is nearby, go ahead and capture it
+        action = self.find_enemy_flag_nearby(x, y, obs)
+        if action != UNDEFINED:
+            return action
+
+        if self.count != 0:
+            # check all the potential actions
+            potential_actions = []
+            for action in [UP, RIGHT, DOWN, LEFT]:
+                next_x, next_y = self.next_position(x, y, action)
+                if not self.check_obstacle_and_enemy(next_x, next_y, obs) and \
+                    not self.check_dangerous(agent.a_range, next_x, next_y, obs):
+                    potential_actions.append(action)
+
+            # choose action among potential actions
+            check_sequence = np.random.permutation([LEFT, RIGHT, DOWN, UP]).tolist()
+            for action in check_sequence:
+                if action in potential_actions:
+                    self.prev_action_list[index] = action
+                    return action
+
+        # choose a random action, favoring horizontal search to vertical search
+        action = np.random.choice([UP, RIGHT, DOWN, LEFT], p=[0.1, 0.35, 0.2, 0.35])
+        self.prev_action_list[index] = action
+        return action
 
     def next_position(self, x, y, action):
         if action == STAY:
@@ -160,9 +202,16 @@ class PolicyGen:
             return True
         return False
 
+    def check_obstacle_and_enemy(self, x, y, obs):
+        if self.check_obstacle(x, y, obs):
+            return True
+        if obs[x][y] == TEAM2_UGV:
+            return True
+        return False
+
     def find_attacking_direction(self, a_range, x, y, obs):
         for delta_x in range(-2*a_range, 2*a_range+1):
-            for delta_y in range(0, 2*a_range+1):
+            for delta_y in range(-2*a_range, 2*a_range+1):
                 loc_x, loc_y = x+delta_x, y+delta_y
                 if delta_x**2 + delta_y**2 <= (a_range*2)**2 and \
                     not self.check_out_of_bound(loc_x, loc_y, len(obs), len(obs[0])) and \
@@ -172,78 +221,20 @@ class PolicyGen:
                     else: return STAY
         return UNDEFINED
 
-        # x,y = agent.get_loc()
-        # action = self.prev_action[index]
-        #
-        # self.count = self.count - 1
-        #
-        # # if cross the boundary, go back to avoid being killed
-        # if (y >= len(obs[0])):
-        #     action = 1
-        #     self.prev_action[index] = action
-        #     return action
-        #
-        # # increase randomness in actions for exploration
-        # # and avoid the same pattern
-        # if (self.count <= 0):
-        #     self.count = 100
-        #     action = np.random.randint(1, 5)
-        #     self.prev_action[index] = action
-        #     return action
-        #
-        # if (action == 1 or action == 3):
-        #     # if entering a new horizontal line, exploring this line
-        #     possible_actions = []
-        #     for possible_action in [2, 4]:
-        #         next_x, next_y = self.next_position(x, y, possible_action)
-        #         if (not self.check_obstacle(next_x, next_y, obs)):
-        #             possible_actions.append(possible_action)
-        #     if (possible_actions != []):
-        #         for i in range(3):
-        #             action = np.random.choice(possible_actions)
-        #             if (not self.within_attack_range(agent.a_range, x, y, obs)):
-        #                 self.prev_action[index] = action
-        #                 return action
-        #         return 0
-        #     else:
-        #         # if being traped in a corner, turn back
-        #         if (action == 1):
-        #              action = 3
-        #              self.prev_action[index] = action
-        #              return action
-        #         else:
-        #              action = 1
-        #              self.prev_action[index] = action
-        #              return action
-        # else:
-        #     next_x, next_y = self.next_position(x, y, action)
-        #     # continue exploring the current horizontal line if possible
-        #     if (not self.check_obstacle(next_x, next_y, obs)):
-        #         if (not self.within_attack_range(agent.a_range, x, y, obs)):
-        #             return action
-        #         return 0
-        #     else:
-        #         # otherwist, change to a new line
-        #         possible_actions = []
-        #         for possible_action in [1, 3]:
-        #             next_x, next_y = self.next_position(x, y, possible_action)
-        #             if (not self.check_obstacle(next_x, next_y, obs) and
-        #                not self.within_attack_range(agent.a_range, x, y, obs)):
-        #                 possible_actions.append(possible_action)
-        #         if (possible_actions != []):
-        #             for i in range(3):
-        #                 action = np.random.choice(possible_actions)
-        #                 if (not self.within_attack_range(agent.a_range, x, y, obs)):
-        #                     self.prev_action[index] = action
-        #                     return action
-        #             return 0
-        #         else:
-        #             # if being traped in a corner, turn back
-        #             if (action == 2):
-        #                  action = 4
-        #                  self.prev_action[index] = action
-        #                  return action
-        #             else:
-        #                  action = 2
-        #                  self.prev_action[index] = action
-        #                  return action
+    def find_enemy_flag_nearby(self, x, y, obs):
+        for action in [UP, RIGHT, DOWN, LEFT]:
+            next_x, next_y = self.next_position(x, y, action)
+            if not self.check_out_of_bound(next_x, next_y, len(obs), len(obs[0])) and \
+                obs[next_x][next_y]==TEAM2_FLAG:
+                return action
+        return UNDEFINED
+
+    def check_dangerous(self, a_range, x, y, obs):
+        for delta_x in range(-2*a_range, 2*a_range+1):
+            for delta_y in range(-2*a_range, 2*a_range+1):
+                loc_x, loc_y = x+delta_x, y+delta_y
+                if delta_x**2 + delta_y**2 <= (a_range*2)**2 and \
+                    not self.check_out_of_bound(loc_x, loc_y, len(obs), len(obs[0])) and \
+                    obs[loc_x][loc_y]==TEAM2_UGV:
+                    return True
+        return False

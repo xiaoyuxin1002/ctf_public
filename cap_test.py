@@ -35,7 +35,6 @@ while True:
         #action = [0, 0, 0, 0]
         #observation, reward, done, info = env.step(action)
 
-        # action = policy_blue.gen_action(env.get_team_blue, observation)
         observation, reward, done, info = env.step()  # feedback from environment
 
         # render and sleep are not needed for score analysis
