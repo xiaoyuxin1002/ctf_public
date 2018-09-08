@@ -56,7 +56,7 @@ class PolicyGen:
         self.count = 50
 
     def gen_action(self, agent_list, obs, free_map=None):
-        if map is not None:
+        if free_map is not None:
             self.map = free_map
 
         self.count = self.count - 1
