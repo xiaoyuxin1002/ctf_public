@@ -36,7 +36,7 @@ while True:
         #observation, reward, done, info = env.step(action)
 
         observation, reward, done, info = env.step()  # feedback from environment
-
+        policy_blue.record_reward(reward)
         # render and sleep are not needed for score analysis
         # env.render(mode="fast")
         # time.sleep(.05)
@@ -45,6 +45,7 @@ while True:
         if t == 100000:
             break
 
+    policy_blue.update_network()
     total_score += reward
     env.reset()
     done = False

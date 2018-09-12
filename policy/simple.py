@@ -30,9 +30,11 @@ class PolicyGen:
 
     def __init__(self, free_map, agent_list):
         self.free_map = free_map
-        self.round = 1
+        self.round = 0
         self.update_freq = 2
+
         self.gamma = 0.99
+        self.reward = []
 
         self.history = []
         for i in range(len(agent_list)):
@@ -79,54 +81,68 @@ class PolicyGen:
     def gen_action(self, agent_list, obs, free_map=None):
 
         if free_map is not None:
-            self.update_network()
-
             self.free_map = free_map
-
-            self.round = self.round + 1
-            self.history = []
-            for i in range(len(agent_list)):
-                self.history.append([])
 
         action_out = []
         for idx,agent in enumerate(agent_list):
-            x,y = agent.get_loc()
-            curr_state = self.parse_obs(obs, x, y)
+            if agent.is_alive:
+                x,y = agent.get_loc()
+                curr_state = self.parse_obs(obs, x, y)
 
-            action = self.sess.run(self.chosen_action, feed_dict={self.state_in:curr_state})
-            action_out.append(action)
+                action = self.sess.run(self.chosen_action, feed_dict={self.state_in:curr_state})
+                action_out.append(action)
 
-            self.history[idx].append([curr_state, action, agent.individual_reward(obs)])
+                self.history[idx].append([curr_state, action])
+            else:
+                action_out.append(STAY)
 
         return action_out
 
+    def record_reward(self, reward):
+        self.reward.append(reward)
+
     def update_network(self):
-        states, actions, rewards = self.extract_info()
+        self.round += 1
+
+        states, actions, rewards = self.prepare_info()
+        self.clear_record()
+
         feed_dict = {self.state_in:states, self.action_holder:actions, self.reward_holder:rewards}
         grads = self.sess.run(self.gradients, feed_dict=feed_dict)
         for idx,grad in enumerate(grads):
             self.gradBuffer[idx] += grad
 
-        if self.round % self.update_freq == 0 and self.round != 0:
+        if self.round % self.update_freq == 0:
             feed_dict = dict(zip(self.gradient_holders, gradBuffer))
             _ = self.sess.run(self.update_batch, feed_dict=feed_dict)
             for ix,grad in enumerate(self.gradBuffer):
                 self.gradBuffer[ix] = grad*0
 
-    def extract_info(self):
-        states = acitons = rewards = []
-        for i in range(len(self.history)): # len(agent_list), agent by agent
-            for j in range(len(self.history[i])): # number of times gen_action() being called
-                states.append(self.history[i][j][0])
-                actions.append(self.history[i][j][1])
-                rewards.append(self.history[i][j][2])
-        return np.array(states), np.array(actions), self.discount_rewards(rewards)
+    def clear_record(self):
+        for i in range(len(self.history)):
+            self.history[i] = []
+        self.reward = []
 
-    def discount_rewards(self, rewards):
-        discounted_rewards = np.zeros_like(rewards)
+    def prepare_info(self):
+        states = actions = rewards = []
+
+        for i in range(len(self.history)):
+            individual_history = np.array(self.history[i])
+            states.append(individual_history[:,0])
+            actions.append(individual_history[:,1])
+            rewards.append(self.discount_rewards(len(individual_history)))
+
+        states = np.array([item for sublist in states for item in sublist])
+        actions = np.array([item for sublist in actions for item in sublist])
+        rewards = np.array([item for sublist in rewards for item in sublist])
+        return states, actions, rewards
+
+    def discount_rewards(self, step_count):
+        discounted_rewards = np.zeros(step_count)
         running_add = 0
-        for t in reversed(range(0, len(rewards))):
-            running_add = running_add * self.gamma + rewards[t]
+
+        for t in reversed(range(step_count)):
+            running_add = running_add * self.gamma + self.reward[t]
             discount_rewards[t] = running_add
         return discount_rewards
 
