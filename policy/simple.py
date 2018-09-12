@@ -8,6 +8,7 @@ import tensorflow.contrib.slim as slim
 
 # TODO include TEAM1_UAV & TEAM2_UAV
 # features in observation
+INVISIBLE = -1
 TEAM1_BACKGROUND = 0
 TEAM2_BACKGROUND = 1
 TEAM1_UGV = 2
@@ -39,7 +40,7 @@ class PolicyGen:
 
         tf.reset_default_graph()
 
-        self.state_in = tf.placeholder(shape=[None,20,20,9], dtype=tf.int32)
+        self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.int32)
         net = slim.conv2d(self.state_in, 64, [10,10])
         net = slim.max_pool2d(net, [2,2])
         net = slim.dropout(net, keep_prob=0.9)
@@ -87,15 +88,10 @@ class PolicyGen:
             for i in range(len(agent_list)):
                 self.history.append([])
 
-        curr_state = self.parse_obs(obs)
-
         action_out = []
         for idx,agent in enumerate(agent_list):
-
             x,y = agent.get_loc()
-            my_loc = np.zeros((20,20,1))
-            my_loc[x][y][0] = 1
-            curr_state = np.append(my_loc, curr_state, axis=2)
+            curr_state = self.parse_obs(obs, x, y)
 
             action = self.sess.run(self.chosen_action, feed_dict={self.state_in:curr_state})
             action_out.append(action)
@@ -134,26 +130,43 @@ class PolicyGen:
             discount_rewards[t] = running_add
         return discount_rewards
 
-    def parse_obs(self, obs):
-        # the channel number for each feature
+    def parse_obs(self, obs, x, y):
+        # the channel number for different features
+        # Channel 0: Visible (not -1): 1
+        # Channel 1: Team1_Background VS Team2_Background: 1 VS -1
+        # Channel 2: Team1_UGV VS Team2_UGV: 1 VS -1
+        # Channel 3: Team1_Flag VS Team2_Flag: 1 VS -1
+        # Channel 4: Obstacle + Everything out of Boundary: 1
+        # Ignore DEAD
         switcher = {
-            TEAM1_BACKGROUND:0,
-            TEAM2_BACKGROUND:1,
-            TEAM1_UGV:2,
-            TEAM2_UGV:3,
-            TEAM1_FLAG:4,
-            TEAM2_FLAG:5,
-            OBSTACLE:6,
-            DEAD:7
+            TEAM1_BACKGROUND:(1,  1),
+            TEAM2_BACKGROUND:(1, -1),
+            TEAM1_UGV:(2,  1),
+            TEAM2_UGV:(2, -1),
+            TEAM1_FLAG:(3,  1),
+            TEAM2_FLAG:(3, -1),
+            OBSTACLE:(4,  1)
         }
 
-        parsed_obs = np.zeros((20,20,8))
+        parsed_obs = np.zeros((len(obs),len(obs[0]),5))
 
+        # Shift the active unit to the center of the observation
+        x_shift = len(obs)/2 - x
+        y_shift = len(obs[0])/2 - y
+
+        for i in range(max(0, x-len(obs)/2), min(len(obs), x+len(obs)/2)):
+            for j in range(max(0, y-len(obs[0])/2), min(len(obs[0]), y+len(obs[0])/2)):
+                if obs[i][j] != INVISIBLE:
+                    parsed_obs[i+x_shift][j+y_shift][0] = 1
+                    result = switcher.get(obs[i][j], 'nothing')
+                    if result != 'nothing':
+                        parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
+
+        # add padding to Channel 4 for everything out of boundary
         for i in range(len(obs)):
             for j in range(len(obs[i])):
-                if obs[i][j] != -1:
-                    channel = switcher.get(obs[i][j], 'nothing')
-                    if channel != 'nothing':
-                        parsed_obs[i][j][channel] = 1
+                ori_i, ori_j = i - x_shift, j - y_shift
+                if ori_i < 0 or ori_i >= len(obs) or ori_j < 0 or ori_j >= len(obs[i]):
+                    parsed_obs[i][j][4] = 1
 
         return parsed_obs
