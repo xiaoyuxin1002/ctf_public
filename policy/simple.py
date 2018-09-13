@@ -31,7 +31,7 @@ class PolicyGen:
     def __init__(self, free_map, agent_list):
         self.free_map = free_map
         self.round = 0
-        self.update_freq = 2
+        self.update_freq = 1
 
         self.gamma = 0.99
         self.reward = []
@@ -42,7 +42,7 @@ class PolicyGen:
 
         tf.reset_default_graph()
 
-        self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.int32)
+        self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
         net = slim.conv2d(self.state_in, 64, [10,10])
         net = slim.max_pool2d(net, [2,2])
         net = slim.dropout(net, keep_prob=0.9)
@@ -77,7 +77,6 @@ class PolicyGen:
         for idx,grad in enumerate(self.gradBuffer):
             self.gradBuffer[idx] = grad*0
 
-
     def gen_action(self, agent_list, obs, free_map=None):
 
         if free_map is not None:
@@ -85,12 +84,12 @@ class PolicyGen:
 
         action_out = []
         for idx,agent in enumerate(agent_list):
-            if agent.is_alive:
+            if agent.isAlive:
                 x,y = agent.get_loc()
                 curr_state = self.parse_obs(obs, x, y)
 
-                action = self.sess.run(self.chosen_action, feed_dict={self.state_in:curr_state})
-                action_out.append(action)
+                action = self.sess.run(self.chosen_action, feed_dict={self.state_in:[curr_state]})
+                action_out.append(action[0])
 
                 self.history[idx].append([curr_state, action])
             else:
@@ -113,7 +112,7 @@ class PolicyGen:
             self.gradBuffer[idx] += grad
 
         if self.round % self.update_freq == 0:
-            feed_dict = dict(zip(self.gradient_holders, gradBuffer))
+            feed_dict = dict(zip(self.gradient_holders, self.gradBuffer))
             _ = self.sess.run(self.update_batch, feed_dict=feed_dict)
             for ix,grad in enumerate(self.gradBuffer):
                 self.gradBuffer[ix] = grad*0
@@ -124,17 +123,20 @@ class PolicyGen:
         self.reward = []
 
     def prepare_info(self):
-        states = actions = rewards = []
+        states = []
+        actions = []
+        rewards = []
 
         for i in range(len(self.history)):
             individual_history = np.array(self.history[i])
             states.append(individual_history[:,0])
-            actions.append(individual_history[:,1])
+            actions.append([item for sublist in individual_history[:,1] for item in sublist])
             rewards.append(self.discount_rewards(len(individual_history)))
 
         states = np.array([item for sublist in states for item in sublist])
         actions = np.array([item for sublist in actions for item in sublist])
         rewards = np.array([item for sublist in rewards for item in sublist])
+
         return states, actions, rewards
 
     def discount_rewards(self, step_count):
@@ -143,8 +145,8 @@ class PolicyGen:
 
         for t in reversed(range(step_count)):
             running_add = running_add * self.gamma + self.reward[t]
-            discount_rewards[t] = running_add
-        return discount_rewards
+            discounted_rewards[t] = running_add
+        return discounted_rewards
 
     def parse_obs(self, obs, x, y):
         # the channel number for different features
@@ -167,16 +169,18 @@ class PolicyGen:
         parsed_obs = np.zeros((len(obs),len(obs[0]),5))
 
         # Shift the active unit to the center of the observation
-        x_shift = len(obs)/2 - x
-        y_shift = len(obs[0])/2 - y
+        x_shift = int(len(obs)/2 - x)
+        y_shift = int(len(obs[0])/2 - y)
 
-        for i in range(max(0, x-len(obs)/2), min(len(obs), x+len(obs)/2)):
-            for j in range(max(0, y-len(obs[0])/2), min(len(obs[0]), y+len(obs[0])/2)):
+        for i in range(max(0, int(x-len(obs)/2)), min(len(obs), int(x+len(obs)/2))):
+            for j in range(max(0, int(y-len(obs[0]))/2), min(len(obs[0]), int(y+len(obs[0])/2))):
+
                 if obs[i][j] != INVISIBLE:
                     parsed_obs[i+x_shift][j+y_shift][0] = 1
                     result = switcher.get(obs[i][j], 'nothing')
                     if result != 'nothing':
                         parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
+
 
         # add padding to Channel 4 for everything out of boundary
         for i in range(len(obs)):

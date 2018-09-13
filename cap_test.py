@@ -5,7 +5,7 @@ import numpy as np
 
 # the modules that you can use to generate the policy.
 import policy.random
-import policy.roomba
+import policy.simple
 
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
@@ -15,7 +15,7 @@ t = 0
 total_score = 0
 
 # reset the environment and select the policies for each of the team
-policy_blue=policy.roomba.PolicyGen(env.get_map, env.get_team_blue)
+policy_blue=policy.simple.PolicyGen(env.get_map, env.get_team_blue)
 policy_red=policy.random.PolicyGen(env.get_map, env.get_team_red)
 observation = env.reset(map_size=20,
                         render_mode="env",
@@ -45,8 +45,10 @@ while True:
         if t == 100000:
             break
 
-    policy_blue.update_network()
     total_score += reward
     env.reset()
     done = False
     print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+    update_start_time = time.time()
+    policy_blue.update_network()
+    print("Update Time: %s s" % (time.time() - update_start_time))
