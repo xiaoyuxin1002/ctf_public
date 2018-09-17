@@ -6,13 +6,15 @@ import numpy as np
 # the modules that you can use to generate the policy.
 import policy.random
 import policy.simple
+import policy.roomba
 
 start_time = time.time()
 env = gym.make("cap-v0") # initialize the environment
 
-done = False
 t = 0
 total_score = 0
+round = 0
+reward_records = []
 
 # reset the environment and select the policies for each of the team
 policy_blue=policy.simple.PolicyGen(env.get_map, env.get_team_blue)
@@ -23,6 +25,10 @@ observation = env.reset(map_size=20,
                         policy_red=policy_red)
 
 while True:
+
+    prev_reward = 0
+    done = False
+
     while not done:
 
         #you are free to select a random action
@@ -36,7 +42,9 @@ while True:
         #observation, reward, done, info = env.step(action)
 
         observation, reward, done, info = env.step()  # feedback from environment
-        policy_blue.record_reward(reward)
+        policy_blue.record_reward(reward - prev_reward)
+        prev_reward = reward
+
         # render and sleep are not needed for score analysis
         # env.render(mode="fast")
         # time.sleep(.05)
@@ -47,8 +55,18 @@ while True:
 
     total_score += reward
     env.reset()
-    done = False
     print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+
     update_start_time = time.time()
     policy_blue.update_network()
     print("Update Time: %s s" % (time.time() - update_start_time))
+
+    round += 1
+    reward_records.append(reward)
+    if round % 10 == 0:
+        output_file = open("reward_records.txt", 'a')
+        output_file.write(str(reward_records))
+        output_file.write(" mean reward: %f\n" % np.mean(reward_records))
+        output_file.close()
+        policy_blue.save_model()
+        reward_records = []

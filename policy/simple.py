@@ -31,7 +31,7 @@ class PolicyGen:
     def __init__(self, free_map, agent_list):
         self.free_map = free_map
         self.round = 0
-        self.update_freq = 1
+        self.update_freq = 2
 
         self.gamma = 0.99
         self.reward = []
@@ -43,10 +43,10 @@ class PolicyGen:
         tf.reset_default_graph()
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
-        net = slim.conv2d(self.state_in, 64, [10,10])
+        net = slim.conv2d(self.state_in, 128, [5,5], padding='VALID')
         net = slim.max_pool2d(net, [2,2])
         net = slim.dropout(net, keep_prob=0.9)
-        net = slim.conv2d(net, 32, [5,5], padding='VALID')
+        net = slim.conv2d(net, 64, [3,3], padding='VALID')
         net = slim.max_pool2d(net, [2,2])
         net = slim.flatten(net)
         self.output = slim.fully_connected(net,len(ACTION_SPACE),activation_fn=tf.nn.softmax)
@@ -72,10 +72,20 @@ class PolicyGen:
         self.update_batch = optimizer.apply_gradients(zip(self.gradient_holders, tvars))
 
         self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
+        self.saver = tf.train.Saver(tf.global_variables())
+        writer = tf.summary.FileWriter('./logs', self.sess.graph)
+        ckpt = tf.train.get_checkpoint_state('./model')
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+        else:
+            self.sess.run(tf.global_variables_initializer())
+
         self.gradBuffer = self.sess.run(tf.trainable_variables())
         for idx,grad in enumerate(self.gradBuffer):
             self.gradBuffer[idx] = grad*0
+
+    def save_model(self):
+        self.saver.save(self.sess, './model/ctf_policy.ckpt')
 
     def gen_action(self, agent_list, obs, free_map=None):
 
