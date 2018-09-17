@@ -99,6 +99,10 @@ class PolicyGen:
                 curr_state = self.parse_obs(obs, x, y)
 
                 action = self.sess.run(self.chosen_action, feed_dict={self.state_in:[curr_state]})
+                # print("check: ", self.sess.run(self.output, feed_dict={self.state_in:[curr_state]}))
+                # print("state: ", curr_state.shape)
+                # for abc in range(len(curr_state[0][0])):
+                #     print(curr_state[:,:,abc])
                 action_out.append(action[0])
 
                 self.history[idx].append([curr_state, action])
