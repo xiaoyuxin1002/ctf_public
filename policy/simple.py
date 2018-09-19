@@ -30,7 +30,12 @@ class PolicyGen:
 
     def __init__(self, free_map, agent_list):
         self.free_map = free_map
-        self.round = 0
+        for i in range(len(free_map)):
+            for j in range(len(free_map[0])):
+                if free_map[i][j] == TEAM2_FLAG:
+                    self.flag_loc = (i, j)
+                    break
+
         self.update_freq = 2
 
         self.gamma = 0.99
@@ -41,6 +46,9 @@ class PolicyGen:
             self.history.append([])
 
         tf.reset_default_graph()
+
+        self.round = tf.Variable(0, trainable=False, name='round')
+        self.round_increment = tf.assign(self.round, self.round+1)
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
         net = slim.conv2d(self.state_in, 128, [5,5], padding='VALID')
@@ -99,10 +107,6 @@ class PolicyGen:
                 curr_state = self.parse_obs(obs, x, y)
 
                 action = self.sess.run(self.chosen_action, feed_dict={self.state_in:[curr_state]})
-                # print("check: ", self.sess.run(self.output, feed_dict={self.state_in:[curr_state]}))
-                # print("state: ", curr_state.shape)
-                # for abc in range(len(curr_state[0][0])):
-                #     print(curr_state[:,:,abc])
                 action_out.append(action[0])
 
                 self.history[idx].append([curr_state, action])
@@ -115,7 +119,7 @@ class PolicyGen:
         self.reward.append(reward)
 
     def update_network(self):
-        self.round += 1
+        self.sess.run(self.round_increment)
 
         states, actions, rewards = self.prepare_info()
         self.clear_record()
@@ -125,7 +129,7 @@ class PolicyGen:
         for idx,grad in enumerate(grads):
             self.gradBuffer[idx] += grad
 
-        if self.round % self.update_freq == 0:
+        if self.sess.run(self.round) % self.update_freq == 0:
             feed_dict = dict(zip(self.gradient_holders, self.gradBuffer))
             _ = self.sess.run(self.update_batch, feed_dict=feed_dict)
             for ix,grad in enumerate(self.gradBuffer):
@@ -195,6 +199,16 @@ class PolicyGen:
                     if result != 'nothing':
                         parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
 
+        # add the background of the current location to channel 1
+        if self.free_map[x][y] == TEAM1_BACKGROUND:
+            parsed_obs[x+x_shift][y+y_shift][1] = 1
+        else:
+            parsed_obs[x+x_shift][y+y_shift][1] = -1
+
+        # add the enemy flag location to channel 3
+        flag_loc_x, flag_loc_y = self.flag_loc[0]+x_shift, self.flag_loc[1]+y_shift
+        if flag_loc_x >= 0 and flag_loc_x < len(obs) and flag_loc_y >= 0 and flag_loc_y < len(obs[0]):
+            parsed_obs[flag_loc_x][flag_loc_y][3] = -1
 
         # add padding to Channel 4 for everything out of boundary
         for i in range(len(obs)):

@@ -13,10 +13,7 @@ env = gym.make("cap-v0") # initialize the environment
 
 # t = 0
 total_score = 0
-round = 0
 reward_records = []
-
-print(len(env.get_team_blue))
 
 # reset the environment and select the policies for each of the team
 policy_blue=policy.simple.PolicyGen(env.get_map, env.get_team_blue)
@@ -67,15 +64,14 @@ while True:
     policy_blue.update_network()
     print("Update Time: %s s" % (time.time() - update_start_time))
 
-    round += 1
     reward_file = open("reward_records.txt", "a")
     reward_file.write("%f\n" % reward)
     reward_file.close()
 
     reward_records.append(reward)
+    round = policy_blue.sess.run(policy_blue.round)
     if round % 10 == 0:
         output_file = open("mean_reward_records.txt", 'a')
-        # output_file.write(str(reward_records))
         output_file.write("rounds: %i-%i, mean reward: %f\n" % (round-9, round, np.mean(reward_records)))
         output_file.close()
         policy_blue.save_model()
