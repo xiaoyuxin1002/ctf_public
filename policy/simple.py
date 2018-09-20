@@ -50,6 +50,8 @@ class PolicyGen:
         self.round = tf.Variable(0, trainable=False, name='round')
         self.round_increment = tf.assign(self.round, self.round+1)
 
+        self.reward_history = tf.constant([])
+
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
         net = slim.conv2d(self.state_in, 128, [5,5], padding='VALID')
         net = slim.max_pool2d(net, [2,2])
@@ -118,9 +120,7 @@ class PolicyGen:
     def record_reward(self, reward):
         self.reward.append(reward)
 
-    def update_network(self):
-        self.sess.run(self.round_increment)
-
+    def update_network(self, reward):
         states, actions, rewards = self.prepare_info()
         self.clear_record()
 
@@ -134,6 +134,9 @@ class PolicyGen:
             _ = self.sess.run(self.update_batch, feed_dict=feed_dict)
             for ix,grad in enumerate(self.gradBuffer):
                 self.gradBuffer[ix] = grad*0
+
+        self.sess.run(self.round_increment)
+        self.reward_history = tf.concat([self.reward_history, [reward]], 0)
 
     def clear_record(self):
         for i in range(len(self.history)):
