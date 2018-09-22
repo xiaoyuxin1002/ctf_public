@@ -30,6 +30,7 @@ class PolicyGen:
 
     def __init__(self, free_map, agent_list):
         self.free_map = free_map
+
         for i in range(len(free_map)):
             for j in range(len(free_map[0])):
                 if free_map[i][j] == TEAM2_FLAG:
@@ -53,15 +54,15 @@ class PolicyGen:
         self.reward_history = tf.constant([])
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
-        net = slim.conv2d(self.state_in, 128, [5,5], padding='VALID')
-        net = slim.max_pool2d(net, [2,2])
+        net = slim.conv2d(self.state_in, 16, [5,5], padding='VALID')
+        #net = slim.max_pool2d(net, [2,2])
         net = slim.dropout(net, keep_prob=0.9)
-        net = slim.conv2d(net, 64, [3,3], padding='VALID')
-        net = slim.max_pool2d(net, [2,2])
+        net = slim.conv2d(net, 16, [3,3], padding='VALID')
+        #net = slim.max_pool2d(net, [2,2])
         net = slim.flatten(net)
         self.output = slim.fully_connected(net,len(ACTION_SPACE),activation_fn=tf.nn.softmax)
 
-        self.chosen_action = tf.argmax(self.output, 1)
+        #self.chosen_action = tf.argmax(self.output, 1)
         self.reward_holder = tf.placeholder(shape=[None], dtype=tf.float32)
         self.action_holder = tf.placeholder(shape=[None], dtype=tf.int32)
 
@@ -78,7 +79,7 @@ class PolicyGen:
 
         self.gradients = tf.gradients(self.loss, tvars)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
         self.update_batch = optimizer.apply_gradients(zip(self.gradient_holders, tvars))
 
         self.sess = tf.Session()
@@ -97,7 +98,12 @@ class PolicyGen:
     def save_model(self):
         self.saver.save(self.sess, './model/ctf_policy.ckpt')
 
+    def get_full_picture(self, _env):
+        self._env = _env
+
     def gen_action(self, agent_list, obs, free_map=None):
+
+        obs = self._env
 
         if free_map is not None:
             self.free_map = free_map
@@ -114,6 +120,7 @@ class PolicyGen:
                 curr_state = self.parse_obs(obs, x, y)
 
                 output = self.sess.run(self.output, feed_dict={self.state_in:[curr_state]})
+                #print(output[0])
                 action = np.random.choice(ACTION_SPACE, p=output[0])
                 action_out.append(action)
 
@@ -122,6 +129,61 @@ class PolicyGen:
                 action_out.append(STAY)
 
         return action_out
+
+    def parse_obs(self, obs, x, y):
+        # the channel number for different features
+        # Channel 0: Visible (not -1): 1
+        # Channel 1: Team1_Background VS Team2_Background: 1 VS -1
+        # Channel 2: Team1_UGV VS Team2_UGV: 1 VS -1
+        # Channel 3: Team1_Flag VS Team2_Flag: 1 VS -1
+        # Channel 4: Obstacle + Everything out of Boundary: 1
+        # Ignore DEAD
+        switcher = {
+            TEAM1_BACKGROUND:(1,  1),
+            TEAM2_BACKGROUND:(1, -1),
+            TEAM1_UGV:(2,  1),
+            TEAM2_UGV:(2, -1),
+            TEAM1_FLAG:(3,  1),
+            TEAM2_FLAG:(3, -1),
+            OBSTACLE:(4,  1)
+        }
+
+        parsed_obs = np.zeros((len(obs),len(obs[0]),5))
+
+        # Shift the active unit to the center of the observation
+        x_shift = int(len(obs)/2 - x)
+        y_shift = int(len(obs[0])/2 - y)
+
+        for i in range(max(0, int(x-len(obs)/2)), min(len(obs), int(x+len(obs)/2))):
+            for j in range(max(0, int(y-len(obs[0]))/2), min(len(obs[0]), int(y+len(obs[0])/2))):
+
+                if obs[i][j] != INVISIBLE:
+                    parsed_obs[i+x_shift][j+y_shift][0] = 1
+                    result = switcher.get(obs[i][j], 'nothing')
+                    if result != 'nothing':
+                        parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
+
+        # add the background of the current location to channel 1
+        if self.free_map[x][y] == TEAM1_BACKGROUND:
+            parsed_obs[x+x_shift][y+y_shift][1] = 1
+        else:
+            parsed_obs[x+x_shift][y+y_shift][1] = -1
+
+        # add the enemy flag location to channel 3
+        flag_loc_x, flag_loc_y = self.flag_loc[0]+x_shift, self.flag_loc[1]+y_shift
+        if flag_loc_x >= 0 and flag_loc_x < len(obs) and flag_loc_y >= 0 and flag_loc_y < len(obs[0]):
+            parsed_obs[flag_loc_x][flag_loc_y][0] = 1
+            parsed_obs[flag_loc_x][flag_loc_y][1] = -1
+            parsed_obs[flag_loc_x][flag_loc_y][3] = -1
+
+        # add padding to Channel 4 for everything out of boundary
+        for i in range(len(obs)):
+            for j in range(len(obs[i])):
+                ori_i, ori_j = i - x_shift, j - y_shift
+                if ori_i < 0 or ori_i >= len(obs) or ori_j < 0 or ori_j >= len(obs[i]):
+                    parsed_obs[i][j][4] = 1
+
+        return parsed_obs
 
     def record_reward(self, reward):
         self.reward.append(reward)
@@ -174,59 +236,3 @@ class PolicyGen:
             running_add = running_add * self.gamma + self.reward[t]
             discounted_rewards[t] = running_add
         return discounted_rewards
-
-    def parse_obs(self, obs, x, y):
-        # the channel number for different features
-        # Channel 0: Visible (not -1): 1
-        # Channel 1: Team1_Background VS Team2_Background: 1 VS -1
-        # Channel 2: Team1_UGV VS Team2_UGV: 1 VS -1
-        # Channel 3: Team1_Flag VS Team2_Flag: 1 VS -1
-        # Channel 4: Obstacle + Everything out of Boundary: 1
-        # Ignore DEAD
-        switcher = {
-            TEAM1_BACKGROUND:(1,  1),
-            TEAM2_BACKGROUND:(1, -1),
-            TEAM1_UGV:(2,  1),
-            TEAM2_UGV:(2, -1),
-            TEAM1_FLAG:(3,  1),
-            TEAM2_FLAG:(3, -1),
-            OBSTACLE:(4, -1)
-        }
-
-        parsed_obs = np.zeros((len(obs),len(obs[0]),5))
-
-        # Shift the active unit to the center of the observation
-        x_shift = int(len(obs)/2 - x)
-        y_shift = int(len(obs[0])/2 - y)
-
-        for i in range(max(0, int(x-len(obs)/2)), min(len(obs), int(x+len(obs)/2))):
-            for j in range(max(0, int(y-len(obs[0]))/2), min(len(obs[0]), int(y+len(obs[0])/2))):
-
-                if obs[i][j] != INVISIBLE:
-                    parsed_obs[i+x_shift][j+y_shift][0] = 1
-                    result = switcher.get(obs[i][j], 'nothing')
-                    if result != 'nothing':
-                        parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
-
-        # add the background of the current location to channel 1
-        if self.free_map[x][y] == TEAM1_BACKGROUND:
-            parsed_obs[x+x_shift][y+y_shift][1] = 1
-        else:
-            parsed_obs[x+x_shift][y+y_shift][1] = -1
-
-        # add the enemy flag location to channel 3
-        flag_loc_x, flag_loc_y = self.flag_loc[0]+x_shift, self.flag_loc[1]+y_shift
-        if flag_loc_x >= 0 and flag_loc_x < len(obs) and flag_loc_y >= 0 and flag_loc_y < len(obs[0]):
-            parsed_obs[flag_loc_x][flag_loc_y][0] = 1
-            parsed_obs[flag_loc_x][flag_loc_y][1] = -1
-            parsed_obs[flag_loc_x][flag_loc_y][3] = -1
-
-
-        # add padding to Channel 4 for everything out of boundary
-        for i in range(len(obs)):
-            for j in range(len(obs[i])):
-                ori_i, ori_j = i - x_shift, j - y_shift
-                if ori_i < 0 or ori_i >= len(obs) or ori_j < 0 or ori_j >= len(obs[i]):
-                    parsed_obs[i][j][4] = -1
-
-        return parsed_obs
