@@ -38,7 +38,7 @@ class PolicyGen:
 
         self.update_freq = 2
 
-        self.gamma = 0.99
+        self.gamma = 0.999
         self.reward = []
 
         self.history = []
@@ -101,6 +101,11 @@ class PolicyGen:
 
         if free_map is not None:
             self.free_map = free_map
+            for i in range(len(free_map)):
+                for j in range(len(free_map[0])):
+                    if free_map[i][j] == TEAM2_FLAG:
+                        self.flag_loc = (i, j)
+                        break
 
         action_out = []
         for idx,agent in enumerate(agent_list):
@@ -108,8 +113,9 @@ class PolicyGen:
                 x,y = agent.get_loc()
                 curr_state = self.parse_obs(obs, x, y)
 
-                action = self.sess.run(self.chosen_action, feed_dict={self.state_in:[curr_state]})
-                action_out.append(action[0])
+                output = self.sess.run(self.output, feed_dict={self.state_in:[curr_state]})
+                action = np.random.choice(ACTION_SPACE, p=output[0])
+                action_out.append(action)
 
                 self.history[idx].append([curr_state, action])
             else:
@@ -151,7 +157,7 @@ class PolicyGen:
         for i in range(len(self.history)):
             individual_history = np.array(self.history[i])
             states.append(individual_history[:,0])
-            actions.append([item for sublist in individual_history[:,1] for item in sublist])
+            actions.append(individual_history[:,1])
             rewards.append(self.discount_rewards(len(individual_history)))
 
         states = np.array([item for sublist in states for item in sublist])
@@ -184,7 +190,7 @@ class PolicyGen:
             TEAM2_UGV:(2, -1),
             TEAM1_FLAG:(3,  1),
             TEAM2_FLAG:(3, -1),
-            OBSTACLE:(4,  1)
+            OBSTACLE:(4, -1)
         }
 
         parsed_obs = np.zeros((len(obs),len(obs[0]),5))
@@ -211,13 +217,16 @@ class PolicyGen:
         # add the enemy flag location to channel 3
         flag_loc_x, flag_loc_y = self.flag_loc[0]+x_shift, self.flag_loc[1]+y_shift
         if flag_loc_x >= 0 and flag_loc_x < len(obs) and flag_loc_y >= 0 and flag_loc_y < len(obs[0]):
+            parsed_obs[flag_loc_x][flag_loc_y][0] = 1
+            parsed_obs[flag_loc_x][flag_loc_y][1] = -1
             parsed_obs[flag_loc_x][flag_loc_y][3] = -1
+
 
         # add padding to Channel 4 for everything out of boundary
         for i in range(len(obs)):
             for j in range(len(obs[i])):
                 ori_i, ori_j = i - x_shift, j - y_shift
                 if ori_i < 0 or ori_i >= len(obs) or ori_j < 0 or ori_j >= len(obs[i]):
-                    parsed_obs[i][j][4] = 1
+                    parsed_obs[i][j][4] = -1
 
         return parsed_obs
