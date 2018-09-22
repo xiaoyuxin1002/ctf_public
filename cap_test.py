@@ -1,6 +1,7 @@
 import time
 import gym
 import gym_cap
+import math
 import numpy as np
 
 # the modules that you can use to generate the policy.
@@ -40,18 +41,16 @@ while True:
         #observation, reward, done, info = env.step(action)
 
         observation, reward, done, info = env.step()  # feedback from environment
-        if t < 30:
-            policy_blue.record_reward(reward - prev_reward)
-            prev_reward = reward
-        else:
-            policy_blue.record_reward(-100)
+
+        policy_blue.record_reward(reward - prev_reward) #- math.log(max(t-200, 1), 2))
+        prev_reward = reward
 
         # render and sleep are not needed for score analysis
         env.render(mode="fast")
         # time.sleep(.05)
 
         t += 1
-        if t == 10000:#0:
+        if t == 10000:
             break
 
     total_score += reward
