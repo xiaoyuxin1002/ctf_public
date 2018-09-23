@@ -4,7 +4,6 @@ import gym_cap
 import math
 import numpy as np
 
-
 # the modules that you can use to generate the policy.
 import policy.random
 import policy.simple
@@ -28,6 +27,7 @@ while True:
     prev_reward = 0
     done = False
     t = 0
+    curr_round_start_time = time.time()
 
     while not done:
 
@@ -52,15 +52,16 @@ while True:
         # time.sleep(.05)
 
         t += 1
-        if t == 1000:
+        if t == 300:
             break
 
+    curr_round_time = time.time() - curr_round_start_time
     total_score += reward
     env.reset()
-    print("Total time: %s s, score: %s" % ((time.time() - start_time),total_score))
+    print("Total time: %s s, score: %s" % ((time.time() - start_time), total_score))
 
     update_start_time = time.time()
-    policy_blue.update_network(reward)
+    policy_blue.update_network(reward, curr_round_time)
     print("Update Time: %s s" % (time.time() - update_start_time))
 
     round = policy_blue.sess.run(policy_blue.round)
@@ -75,5 +76,5 @@ while True:
         output_file.close()
         policy_blue.save_model()
 
-    if round >= 30000:
+    if round >= 4000:
          break

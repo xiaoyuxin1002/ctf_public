@@ -51,16 +51,24 @@ class PolicyGen:
         self.round = tf.Variable(0, trainable=False, name='round')
         self.round_increment = tf.assign(self.round, self.round+1)
 
+        self.curr_reward = tf.placeholder(tf.float32, shape=(), name='reward')
+        self.curr_time_taken = tf.placeholder(tf.float32, shape=(), name='time_taken')
+        tf.summary.scalar('reward', self.curr_reward)
+        tf.summary.scalar('time', self.curr_time_taken)
+        self.merged_summary_op = tf.summary.merge_all()
+
         self.reward_history = tf.constant([])
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
-        net = slim.conv2d(self.state_in, 16, [5,5], padding='VALID')
+        net = slim.conv2d(self.state_in, 32, [5,5], padding='VALID')
         #net = slim.max_pool2d(net, [2,2])
         net = slim.dropout(net, keep_prob=0.9)
         net = slim.conv2d(net, 16, [3,3], padding='VALID')
         #net = slim.max_pool2d(net, [2,2])
         net = slim.flatten(net)
-        self.output = slim.fully_connected(net,len(ACTION_SPACE),activation_fn=tf.nn.softmax)
+        net = slim.fully_connected(net, 256, activation_fn=tf.nn.softmax)
+        #net = slim.fully_connected(net, 32, activation_fn=tf.nn.softmax)
+        self.output = slim.fully_connected(net, len(ACTION_SPACE), activation_fn=tf.nn.softmax)
 
         #self.chosen_action = tf.argmax(self.output, 1)
         self.reward_holder = tf.placeholder(shape=[None], dtype=tf.float32)
@@ -84,7 +92,7 @@ class PolicyGen:
 
         self.sess = tf.Session()
         self.saver = tf.train.Saver(tf.global_variables())
-        writer = tf.summary.FileWriter('./logs', self.sess.graph)
+        self.writer = tf.summary.FileWriter('./logs', self.sess.graph)
         ckpt = tf.train.get_checkpoint_state('./model')
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
@@ -132,13 +140,14 @@ class PolicyGen:
 
     def parse_obs(self, obs, x, y):
         # the channel number for different features
-        # Channel 0: Visible (not -1): 1
+        # Channel 0: INVISIBLE: 1
         # Channel 1: Team1_Background VS Team2_Background: 1 VS -1
         # Channel 2: Team1_UGV VS Team2_UGV: 1 VS -1
         # Channel 3: Team1_Flag VS Team2_Flag: 1 VS -1
         # Channel 4: Obstacle + Everything out of Boundary: 1
         # Ignore DEAD
         switcher = {
+            INVISIBLE:(0,  1),
             TEAM1_BACKGROUND:(1,  1),
             TEAM2_BACKGROUND:(1, -1),
             TEAM1_UGV:(2,  1),
@@ -157,11 +166,11 @@ class PolicyGen:
         for i in range(max(0, int(x-len(obs)/2)), min(len(obs), int(x+len(obs)/2))):
             for j in range(max(0, int(y-len(obs[0]))/2), min(len(obs[0]), int(y+len(obs[0])/2))):
 
-                if obs[i][j] != INVISIBLE:
-                    parsed_obs[i+x_shift][j+y_shift][0] = 1
-                    result = switcher.get(obs[i][j], 'nothing')
-                    if result != 'nothing':
-                        parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
+                # if obs[i][j] != INVISIBLE:
+                #     parsed_obs[i+x_shift][j+y_shift][0] = 1
+                result = switcher.get(obs[i][j], 'nothing')
+                if result != 'nothing':
+                    parsed_obs[i+x_shift][j+y_shift][result[0]] = result[1]
 
         # add the background of the current location to channel 1
         if self.free_map[x][y] == TEAM1_BACKGROUND:
@@ -172,7 +181,7 @@ class PolicyGen:
         # add the enemy flag location to channel 3
         flag_loc_x, flag_loc_y = self.flag_loc[0]+x_shift, self.flag_loc[1]+y_shift
         if flag_loc_x >= 0 and flag_loc_x < len(obs) and flag_loc_y >= 0 and flag_loc_y < len(obs[0]):
-            parsed_obs[flag_loc_x][flag_loc_y][0] = 1
+            #parsed_obs[flag_loc_x][flag_loc_y][0] = 1
             parsed_obs[flag_loc_x][flag_loc_y][1] = -1
             parsed_obs[flag_loc_x][flag_loc_y][3] = -1
 
@@ -188,7 +197,7 @@ class PolicyGen:
     def record_reward(self, reward):
         self.reward.append(reward)
 
-    def update_network(self, reward):
+    def update_network(self, reward, time_taken):
         states, actions, rewards = self.prepare_info()
         self.clear_record()
 
@@ -205,6 +214,10 @@ class PolicyGen:
 
         self.sess.run(self.round_increment)
         self.reward_history = tf.concat([self.reward_history, [reward]], 0)
+
+        summary = self.sess.run(self.merged_summary_op, feed_dict={self.curr_reward:reward, self.curr_time_taken:time_taken})
+        self.writer.add_summary(summary, global_step=self.sess.run(self.round))
+
 
     def clear_record(self):
         for i in range(len(self.history)):
