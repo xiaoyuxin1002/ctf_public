@@ -2,9 +2,11 @@
 Simple (Policy Gradient) agents policy generator
 """
 
+import sys
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from pathlib import Path
 
 # TODO include TEAM1_UAV & TEAM2_UAV
 # features in observation
@@ -51,8 +53,19 @@ class PolicyGen:
         self.round = tf.Variable(0, trainable=False, name='round')
         self.round_increment = tf.assign(self.round, self.round+1)
 
-        self.reward_history = tf.constant([])
-        self.time_history = tf.constant([])
+        if Path('reward_records.txt').is_file():
+            reward_file = open('reward_records.txt', 'r')
+            rewards = reward_file.read().splitlines()
+            self.reward_history = tf.constant([float(item) for item in rewards])
+        else:
+            self.reward_history = tf.constant([])
+
+        if Path('time_records.txt').is_file():
+            time_file = open('time_records.txt', 'r')
+            times = reward_file.read().splitlines()
+            self.time_history = tf.constant([float(item) for item in times])
+        else:
+            self.time_history = tf.constant([])
 
         self.curr_reward = tf.placeholder(tf.float32, shape=(), name="reward")
         self.mean_reward_10 = tf.placeholder(tf.float32, shape=(), name="mean_reward_10")
@@ -115,7 +128,7 @@ class PolicyGen:
             self.gradBuffer[idx] = grad*0
 
     def save_model(self):
-        self.saver.save(self.sess, './model/ctf_policy.ckpt')
+        self.saver.save(self.sess, './model/ctf_policy.ckpt', global_step=self.sess.run(self.round))
 
     def get_full_picture(self, _env):
         self._env = _env
@@ -139,7 +152,6 @@ class PolicyGen:
                 curr_state = self.parse_obs(obs, x, y)
 
                 output = self.sess.run(self.output, feed_dict={self.state_in:[curr_state]})
-                #print(output[0])
                 action = np.random.choice(ACTION_SPACE, p=output[0])
                 action_out.append(action)
 
@@ -225,7 +237,7 @@ class PolicyGen:
             for ix,grad in enumerate(self.gradBuffer):
                 self.gradBuffer[ix] = grad*0
 
-        self.reward_history = tf.concat([self.reward_history, [reward]], 0)
+        self.reward_history = tf.concat([self.reward_history, [float(reward)]], 0)
         self.time_history = tf.concat([self.time_history, [time_taken]], 0)
 
         feed_dict = { \
@@ -238,7 +250,6 @@ class PolicyGen:
         }
         summary = self.sess.run(self.merged_summary_op, feed_dict=feed_dict)
         self.writer.add_summary(summary, global_step=self.sess.run(self.round))
-
 
     def clear_record(self):
         for i in range(len(self.history)):
@@ -269,4 +280,4 @@ class PolicyGen:
         for t in reversed(range(step_count)):
             running_add = running_add * self.gamma + self.reward[t]
             discounted_rewards[t] = running_add
-        return discounted_rewards
+            return discounted_rewards
