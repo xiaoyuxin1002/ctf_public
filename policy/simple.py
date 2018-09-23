@@ -51,13 +51,24 @@ class PolicyGen:
         self.round = tf.Variable(0, trainable=False, name='round')
         self.round_increment = tf.assign(self.round, self.round+1)
 
-        self.curr_reward = tf.placeholder(tf.float32, shape=(), name='reward')
-        self.curr_time_taken = tf.placeholder(tf.float32, shape=(), name='time_taken')
-        tf.summary.scalar('reward', self.curr_reward)
-        tf.summary.scalar('time', self.curr_time_taken)
-        self.merged_summary_op = tf.summary.merge_all()
-
         self.reward_history = tf.constant([])
+        self.time_history = tf.constant([])
+
+        self.curr_reward = tf.placeholder(tf.float32, shape=(), name="reward")
+        self.mean_reward_10 = tf.placeholder(tf.float32, shape=(), name="mean_reward_10")
+        self.mean_reward_100 = tf.placeholder(tf.float32, shape=(), name="mean_reward_100")
+
+        self.curr_time_taken = tf.placeholder(tf.float32, shape=(), name="time_taken")
+        self.mean_time_10 = tf.placeholder(tf.float32, shape=(), name="mean_time_10")
+        self.mean_time_100 = tf.placeholder(tf.float32, shape=(), name="mean_time_")
+
+        tf.summary.scalar('reward', self.curr_reward)
+        tf.summary.scalar('mean_reward_10', self.mean_reward_10)
+        tf.summary.scalar('mean_reward_100', self.mean_reward_100)
+        tf.summary.scalar('time', self.curr_time_taken)
+        tf.summary.scalar('mean_time_10', self.mean_time_10)
+        tf.summary.scalar('mean_time_100', self.mean_time_100)
+        self.merged_summary_op = tf.summary.merge_all()
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
         net = slim.conv2d(self.state_in, 32, [5,5], padding='VALID')
@@ -206,16 +217,26 @@ class PolicyGen:
         for idx,grad in enumerate(grads):
             self.gradBuffer[idx] += grad
 
-        if self.sess.run(self.round) % self.update_freq == 0:
+        self.sess.run(self.round_increment)
+        round = self.sess.run(self.round)
+        if round % self.update_freq == 0:
             feed_dict = dict(zip(self.gradient_holders, self.gradBuffer))
             _ = self.sess.run(self.update_batch, feed_dict=feed_dict)
             for ix,grad in enumerate(self.gradBuffer):
                 self.gradBuffer[ix] = grad*0
 
-        self.sess.run(self.round_increment)
         self.reward_history = tf.concat([self.reward_history, [reward]], 0)
+        self.time_history = tf.concat([self.time_history, [time_taken]], 0)
 
-        summary = self.sess.run(self.merged_summary_op, feed_dict={self.curr_reward:reward, self.curr_time_taken:time_taken})
+        feed_dict = { \
+            self.curr_reward:reward, \
+            self.mean_reward_10:np.mean(self.sess.run(self.reward_history)[-10:]), \
+            self.mean_reward_100:np.mean(self.sess.run(self.reward_history)[-100:]), \
+            self.curr_time_taken:time_taken, \
+            self.mean_time_10:np.mean(self.sess.run(self.time_history)[-10:]), \
+            self.mean_time_100:np.mean(self.sess.run(self.time_history)[-100:]) \
+        }
+        summary = self.sess.run(self.merged_summary_op, feed_dict=feed_dict)
         self.writer.add_summary(summary, global_step=self.sess.run(self.round))
 
 
