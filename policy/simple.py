@@ -60,27 +60,27 @@ class PolicyGen:
         else:
             self.reward_history = tf.constant([])
 
-        if Path('time_records.txt').is_file():
-            time_file = open('time_records.txt', 'r')
-            times = reward_file.read().splitlines()
-            self.time_history = tf.constant([float(item) for item in times])
+        if Path('step_records.txt').is_file():
+            step_file = open('step_records.txt', 'r')
+            steps = reward_file.read().splitlines()
+            self.step_history = tf.constant([float(item) for item in steps])
         else:
-            self.time_history = tf.constant([])
+            self.step_history = tf.constant([])
 
         self.curr_reward = tf.placeholder(tf.float32, shape=(), name="reward")
         self.mean_reward_10 = tf.placeholder(tf.float32, shape=(), name="mean_reward_10")
         self.mean_reward_100 = tf.placeholder(tf.float32, shape=(), name="mean_reward_100")
 
-        self.curr_time_taken = tf.placeholder(tf.float32, shape=(), name="time_taken")
-        self.mean_time_10 = tf.placeholder(tf.float32, shape=(), name="mean_time_10")
-        self.mean_time_100 = tf.placeholder(tf.float32, shape=(), name="mean_time_")
+        self.curr_steps_taken = tf.placeholder(tf.float32, shape=(), name="steps_taken")
+        self.mean_steps_10 = tf.placeholder(tf.float32, shape=(), name="mean_steps_10")
+        self.mean_steps_100 = tf.placeholder(tf.float32, shape=(), name="mean_steps_100")
 
         tf.summary.scalar('reward', self.curr_reward)
         tf.summary.scalar('mean_reward_10', self.mean_reward_10)
         tf.summary.scalar('mean_reward_100', self.mean_reward_100)
-        tf.summary.scalar('time', self.curr_time_taken)
-        tf.summary.scalar('mean_time_10', self.mean_time_10)
-        tf.summary.scalar('mean_time_100', self.mean_time_100)
+        tf.summary.scalar('step', self.curr_steps_taken)
+        tf.summary.scalar('mean_step_10', self.mean_steps_10)
+        tf.summary.scalar('mean_step_100', self.mean_steps_100)
         self.merged_summary_op = tf.summary.merge_all()
 
         self.state_in = tf.placeholder(shape=[None,len(free_map),len(free_map[0]),5], dtype=tf.float32)
@@ -220,7 +220,7 @@ class PolicyGen:
     def record_reward(self, reward):
         self.reward.append(reward)
 
-    def update_network(self, reward, time_taken):
+    def update_network(self, reward, steps_taken):
         states, actions, rewards = self.prepare_info()
         self.clear_record()
 
@@ -238,15 +238,15 @@ class PolicyGen:
                 self.gradBuffer[ix] = grad*0
 
         self.reward_history = tf.concat([self.reward_history, [float(reward)]], 0)
-        self.time_history = tf.concat([self.time_history, [time_taken]], 0)
+        self.step_history = tf.concat([self.step_history, [float(steps_taken)]], 0)
 
         feed_dict = { \
             self.curr_reward:reward, \
             self.mean_reward_10:np.mean(self.sess.run(self.reward_history)[-10:]), \
             self.mean_reward_100:np.mean(self.sess.run(self.reward_history)[-100:]), \
-            self.curr_time_taken:time_taken, \
-            self.mean_time_10:np.mean(self.sess.run(self.time_history)[-10:]), \
-            self.mean_time_100:np.mean(self.sess.run(self.time_history)[-100:]) \
+            self.curr_steps_taken:steps_taken, \
+            self.mean_steps_10:np.mean(self.sess.run(self.step_history)[-10:]), \
+            self.mean_steps_100:np.mean(self.sess.run(self.step_history)[-100:]) \
         }
         summary = self.sess.run(self.merged_summary_op, feed_dict=feed_dict)
         self.writer.add_summary(summary, global_step=self.sess.run(self.round))

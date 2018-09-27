@@ -21,12 +21,12 @@ if Path('reward_records.txt').is_file():
 else:
     total_score = 0
 
-if Path('time_records.txt').is_file():
-    time_file = open('time_records.txt', 'r')
-    times = time_file.read().splitlines()
-    extra_time = np.sum([float(item) for item in times])
-else:
-    extra_time = 0
+# if Path('time_records.txt').is_file():
+#     time_file = open('time_records.txt', 'r')
+#     times = time_file.read().splitlines()
+#     extra_time = np.sum([float(item) for item in times])
+# else:
+#     extra_time = 0
 
 # reset the environment and select the policies for each of the team
 policy_blue=policy.simple.PolicyGen(env.get_map, env.get_team_blue)
@@ -41,7 +41,7 @@ while True:
     prev_reward = 0
     done = False
     t = 0
-    curr_round_start_time = time.time()
+    #curr_round_start_time = time.time()
 
     while not done:
 
@@ -69,9 +69,9 @@ while True:
         if t == 300:
             break
 
-    curr_round_time = time.time() - curr_round_start_time
+    #curr_round_time = time.time() - curr_round_start_time
 
-    policy_blue.update_network(reward, curr_round_time)
+    policy_blue.update_network(reward, t)#curr_round_time)
 
     round = policy_blue.sess.run(policy_blue.round)
     if round % 100 == 0:
@@ -81,13 +81,13 @@ while True:
     reward_file.write("%f\n" % reward)
     reward_file.close()
 
-    time_file = open("time_records.txt", "a")
-    time_file.write("%f\n" % curr_round_time)
+    time_file = open("step_records.txt", "a")
+    time_file.write("%f\n" % t)
     time_file.close()
 
     total_score += reward
     env.reset()
-    print("Round: %s, total time: %s s, score: %s" % (round, (time.time() - start_time + extra_time), total_score))
+    print("Round: %s, total time: %s s, score: %s" % (round, (time.time() - start_time), total_score))
 
     if round >= 40000:
          break
