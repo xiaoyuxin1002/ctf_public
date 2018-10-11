@@ -1,2 +1,2 @@
-model_checkpoint_path: "ctf_policy.ckpt-2500"
-all_model_checkpoint_paths: "ctf_policy.ckpt-2500"
+model_checkpoint_path: "ctf_policy.ckpt-4500"
+all_model_checkpoint_paths: "ctf_policy.ckpt-4500"

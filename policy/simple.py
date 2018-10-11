@@ -111,7 +111,8 @@ class PolicyGen:
 
         self.gradients = tf.gradients(self.loss, tvars)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+        self.learning_rate = tf.train.exponential_decay(0.0001, self.round-2500, 200, 0.1, staircase=True)
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.update_batch = optimizer.apply_gradients(zip(self.gradient_holders, tvars))
 
         self.sess = tf.Session()
