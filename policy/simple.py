@@ -39,7 +39,7 @@ class PolicyGen:
                     self.flag_loc = (i, j)
                     break
 
-        self.update_freq = 2
+        self.update_freq = 100
 
         self.gamma = 0.999
         self.reward = []
@@ -111,7 +111,7 @@ class PolicyGen:
 
         self.gradients = tf.gradients(self.loss, tvars)
 
-        self.learning_rate = tf.train.exponential_decay(0.0001, self.round-2500, 200, 0.1, staircase=True)
+        self.learning_rate = tf.train.exponential_decay(0.01, self.round-2500, 500, 0.1, staircase=True)
         optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.update_batch = optimizer.apply_gradients(zip(self.gradient_holders, tvars))
 
