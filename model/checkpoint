@@ -1,2 +1,2 @@
-model_checkpoint_path: "ctf_policy.ckpt-6100"
-all_model_checkpoint_paths: "ctf_policy.ckpt-6100"
+model_checkpoint_path: "ctf_policy.ckpt-6900"
+all_model_checkpoint_paths: "ctf_policy.ckpt-6900"

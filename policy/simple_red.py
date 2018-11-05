@@ -131,6 +131,10 @@ class PolicyGen:
     # def save_model(self):
     #     self.saver.save(self.sess, './model/ctf_policy.ckpt', global_step=self.sess.run(self.round))
 
+    def update_model(self):
+        ckpt = tf.train.get_checkpoint_state('./model')
+        self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+
     def get_full_picture(self, _env):
         self._env = _env
 

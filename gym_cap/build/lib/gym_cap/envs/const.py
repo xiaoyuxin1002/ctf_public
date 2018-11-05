@@ -8,7 +8,7 @@ GRAY = 90
 NUM_BLUE = 4
 NUM_RED = 4
 NUM_UAV = 0
-NUM_GRAY = 4
+NUM_GRAY = 0
 UAV_STEP = 3
 UGV_STEP = 1
 UAV_RANGE = 4
@@ -19,20 +19,23 @@ UGV_A_RANGE = 2
 # Model
 RL_SUGGESTIONS = False
 
+STOCH_TRANSITIONS = False
+STOCH_ATTACK = False
+STOCH_ZONES = False
 
 # MapConst
 """ Defining the constants for map and environment """
-WORLD_H = 100
-WORLD_W = 100
-RED_ZONE = 15
-RED_AGENT = 20
-RED_FLAG = 10
-BLUE_ZONE = 55
-BLUE_AGENT = 60
-BLUE_FLAG = 50
-GRAY_AGENT = 95
-#OBSTACLE = 100
-AERIAL_DENIAL = 90
+# WORLD_H = 100
+# WORLD_W = 100
+# RED_ZONE = 15
+# RED_AGENT = 20
+# RED_FLAG = 10
+# BLUE_ZONE = 55
+# BLUE_AGENT = 60
+# BLUE_FLAG = 50
+# GRAY_AGENT = 95
+# #OBSTACLE = 100
+# AERIAL_DENIAL = 90
 
 SUGGESTION = -5
 BLACK = -2
@@ -49,6 +52,7 @@ OBSTACLE = 8
 DEAD = 9
 SELECTED = 10
 COMPLETED = 11
+TEAM3_UGV = 15
 
 COLOR_DICT = {UNKNOWN : (200, 200, 200),
               TEAM1_BACKGROUND : (0, 0, 120),
@@ -60,6 +64,7 @@ COLOR_DICT = {UNKNOWN : (200, 200, 200),
               TEAM1_FLAG : (0, 255, 255),
               TEAM2_FLAG : (255, 255, 0),
               OBSTACLE : (120, 120, 120),
+              TEAM3_UGV : (180, 180, 180),
               DEAD : (0, 0, 0),
               SELECTED : (122, 77, 25),
               BLACK : (0, 0, 0),

@@ -31,9 +31,8 @@ else:
 
 # reset the environment and select the policies for each of the team
 policy_blue=policy.simple.PolicyGen(env.get_map, env.get_team_blue)
-policy_red=policy.simple_red.PolicyGen(env.get_map, env.get_team_red)
+policy_red=policy.random.PolicyGen(env.get_map, env.get_team_red)
 observation = env.reset(map_size=20,
-                        render_mode="env",
                         policy_blue=policy_blue,
                         policy_red=policy_red)
 
@@ -58,7 +57,7 @@ while True:
         #observation, reward, done, info = env.step(action)
 
         policy_blue.get_full_picture(env._env)
-        policy_red.get_full_picture(env._env)
+        #policy_red.get_full_picture(env._env)
         observation, reward, done, info = env.step()  # feedback from environment
 
         policy_blue.record_reward(reward - prev_reward)#math.log(max(t-200, 1), 2))
@@ -80,6 +79,9 @@ while True:
     round = policy_blue.sess.run(policy_blue.round)
     if round % 100 == 0:
         policy_blue.save_model()
+
+    # if round % 200 == 0:
+    #     policy_red.update_model()
 
     reward_file = open("reward_records.txt", "a")
     reward_file.write("%f\n" % reward)
